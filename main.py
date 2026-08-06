@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import discord
@@ -421,7 +422,7 @@ async def unmute(ctx, member: discord.Member):
 async def clear(ctx, cantidad: int = 10):
     if cantidad < 1 or cantidad > 100:
         return await ctx.send("La cantidad debe estar entre 1 y 100.")
-    deleted = await ctx.channel.purge(limit=cantidad + 1)  # +1 para incluir el comando
+    deleted = await ctx.channel.purge(limit=cantidad + 1)
     msg = await ctx.send(f"🧹 Se eliminaron **{len(deleted)-1}** mensajes.")
     await msg.delete(delay=3)
 
@@ -478,8 +479,11 @@ async def cmds(ctx):
         inline=False
     )
     embed.add_field(
-        name="⚙️ Configuración",
-        value="`/welcome-setup` - Configurar sistema de bienvenidas",
+        name="⚙️ Configuración (Slash)",
+        value=(
+            "`/welcome-setup` - Configurar sistema de bienvenidas\n"
+            "`/config-automod` - Configurar AutoMod y canal de logs"
+        ),
         inline=False
     )
     embed.set_footer(text=f"Solicitado por {ctx.author}")
@@ -500,15 +504,106 @@ async def on_ready():
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ No tienes permisos para usar este comando.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ Faltan argumentos. Usa `?cmds` para ver el uso correcto.")
-    elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ Usuario no encontrado.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("❌ Argumento inválido.")
-    else:
-        print(f"Error: {error}")
+        embed = discord.Embed(
+            title="❌ Permisos insuficientes",
+            description="No tienes los permisos necesarios para usar este comando.",
+            color=0xff0000
+        )
+        return await ctx.send(embed=embed, delete_after=8)
+
+    if isinstance(error, commands.MemberNotFound):
+        embed = discord.Embed(
+            title="❌ Usuario no encontrado",
+            description="No pude encontrar a ese usuario. Menciona correctamente o usa su ID.",
+            color=0xff0000
+        )
+        return await ctx.send(embed=embed, delete_after=8)
+
+    if isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)):
+        ayudas = {
+            "warn": {
+                "uso": "`?warn @usuario [motivo]`",
+                "ejemplo": "`?warn @Neiwito Insultos`",
+                "desc": "Advierte a un usuario y guarda el registro."
+            },
+            "warns": {
+                "uso": "`?warns @usuario`",
+                "ejemplo": "`?warns @Neiwito`",
+                "desc": "Muestra todas las advertencias de un usuario."
+            },
+            "kick": {
+                "uso": "`?kick @usuario [motivo]`",
+                "ejemplo": "`?kick @Neiwito Spam`",
+                "desc": "Expulsa a un usuario del servidor."
+            },
+            "ban": {
+                "uso": "`?ban @usuario [motivo]`",
+                "ejemplo": "`?ban @Neiwito Toxicidad`",
+                "desc": "Banea a un usuario del servidor."
+            },
+            "unban": {
+                "uso": "`?unban ID`",
+                "ejemplo": "`?unban 123456789012345678`",
+                "desc": "Desbanea a un usuario usando su ID."
+            },
+            "mute": {
+                "uso": "`?mute @usuario 10m [motivo]`",
+                "ejemplo": "`?mute @Neiwito 1h Flood`",
+                "desc": "Silencia a un usuario (timeout). Formatos: `30s`, `10m`, `2h`, `1d`"
+            },
+            "unmute": {
+                "uso": "`?unmute @usuario`",
+                "ejemplo": "`?unmute @Neiwito`",
+                "desc": "Quita el silencio a un usuario."
+            },
+            "clear": {
+                "uso": "`?clear [cantidad]`",
+                "ejemplo": "`?clear 25`",
+                "desc": "Elimina mensajes del canal (máximo 100)."
+            },
+            "lock": {
+                "uso": "`?lock [#canal] [tiempo]`",
+                "ejemplo": "`?lock #general 10m`",
+                "desc": "Bloquea un canal para que nadie pueda escribir."
+            },
+            "unlock": {
+                "uso": "`?unlock [#canal]`",
+                "ejemplo": "`?unlock #general`",
+                "desc": "Desbloquea un canal."
+            },
+            "slowmode": {
+                "uso": "`?slowmode [segundos]`",
+                "ejemplo": "`?slowmode 5`",
+                "desc": "Activa el modo lento (0 para desactivar)."
+            },
+            "nick": {
+                "uso": "`?nick @usuario [nuevo apodo]`",
+                "ejemplo": "`?nick @Neiwito Admin`",
+                "desc": "Cambia el apodo de un usuario."
+            }
+        }
+
+        cmd = ctx.command.name if ctx.command else "desconocido"
+        info = ayudas.get(cmd)
+
+        if info:
+            embed = discord.Embed(
+                title=f"📖 Uso del comando `?{cmd}`",
+                color=0x5865F2
+            )
+            embed.add_field(name="Uso correcto", value=info["uso"], inline=False)
+            embed.add_field(name="Ejemplo", value=info["ejemplo"], inline=False)
+            embed.add_field(name="Descripción", value=info["desc"], inline=False)
+        else:
+            embed = discord.Embed(
+                title="❌ Argumentos incorrectos",
+                description="Revisa cómo se usa el comando con `?cmds`.",
+                color=0xff0000
+            )
+
+        return await ctx.send(embed=embed, delete_after=15)
+
+    print(f"Error en comando: {error}")
 
 
 # ====================== KEEP ALIVE (Render + UptimeRobot) ======================
@@ -527,11 +622,13 @@ def keep_alive():
 
 keep_alive()
 
-# Cargar el sistema de AutoMod
-async def load_extensions():
-    await bot.load_extension("automod")
 
-@bot.event
-async def setup_hook():
-    await load_extensions()
-bot.run(TOKEN)
+# ====================== CARGA DE EXTENSIONES + INICIO ======================
+async def main():
+    async with bot:
+        await bot.load_extension("actividad")
+        await bot.load_extension("automod")
+        await bot.start(TOKEN)
+
+if __name__ == "__main__":
+    asyncio.run(main())
