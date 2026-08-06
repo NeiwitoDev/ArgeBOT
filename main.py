@@ -526,4 +526,12 @@ def keep_alive():
     t.start()
 
 keep_alive()
+
+# Cargar el sistema de AutoMod
+async def load_extensions():
+    await bot.load_extension("automod")
+
+@bot.event
+async def setup_hook():
+    await load_extensions()
 bot.run(TOKEN)
