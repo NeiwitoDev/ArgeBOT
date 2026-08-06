@@ -474,7 +474,7 @@ async def cmds(ctx):
             "`?unmute @usuario` - Quita el silencio\n"
             "`?clear [cantidad]` - Borra mensajes (1-100)\n"
             "`?slowmode [segundos]` - Activa modo lento\n"
-            "`?nick @usuario [nuevo]` - Cambia apodo"
+            "`?nick @usuario [nuevo]` - Cambia apodo"    
         ),
         inline=False
     )
@@ -483,6 +483,7 @@ async def cmds(ctx):
         value=(
             "`/welcome-setup` - Configurar sistema de bienvenidas\n"
             "`/config-automod` - Configurar AutoMod y canal de logs"
+            "`/tickets-setup` - Configurar sistema de tickets"
         ),
         inline=False
     )
