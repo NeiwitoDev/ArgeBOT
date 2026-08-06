@@ -629,6 +629,7 @@ async def main():
     async with bot:
         await bot.load_extension("actividad")
         await bot.load_extension("automod")
+        await bot.load_extension("tickets")
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
